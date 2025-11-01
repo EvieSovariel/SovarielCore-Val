@@ -1,0 +1,33 @@
+# Hypothesized phase-lock logic from sovariel_v6.py
+import numpy as np
+from scipy.signal import hilbert
+
+def phase_lock_hrv_eeg(epochs_data, hrv_rr, fs=250):
+    # Compute instantaneous phase via Hilbert transform
+    analytical_signal = hilbert(epochs_data.mean(axis=1))  # Average across channels
+    phase_eeg = np.angle(analytical_signal)
+    
+    # Normalize HRV RR intervals to match EEG sampling
+    hrv_phase = np.interp(np.linspace(0, len(hrv_rr)-1, len(phase_eeg)), 
+                         np.arange(len(hrv_rr)), np.unwrap(np.angle(hilbert(hrv_rr))))
+    
+    # Phase difference (dolphin sync proxy)
+    phase_diff = phase_eeg - hrv_phase
+    lock_strength = np.abs(np.mean(np.exp(1j * phase_diff)))
+    
+    # Adjust lattice params with phase lock
+    tokens = epochs_data.size
+    large = tokens // 3 + 1
+    small = tokens // 6 + 1
+    add = large // 2 + 2 * small
+    d_adjust = int(lock_strength * large * 0.1)  # Dynamic d tweak
+    return d_adjust, lock_strength
+
+# Integration into partitioning
+d, lock = phase_lock_hrv_eeg(epochs_data, hrv_rr)
+d = 9104 + d  # Base D16 + phase adjustment
+l = tokens // d  # Rebalance
+
+def sovariel_partition(data, d, l):
+    segments = data.reshape(-1, d, l)
+    return np.mean(segments, axis=(1, 2)) * lock_strength  # Weighted by lock
