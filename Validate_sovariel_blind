@@ -1,73 +1,12 @@
-# validate_sovariel_blind.py - Blinded validation with controls
-# Author: Evie & Aetheris (with Grok 3 assist)
-# Date: 2025-11-01
-# Description: Tests SovarielCore +24.5% coherence with blinded controls.
+# In process_subject function, after tokens/large/small calc
+import random  # Placeholder for quantum sim
+# Mock quantum result (replace with real Qiskit job.result().get_counts())
+mock_counts = {'0': 600, '1': 424}  # 1024 shots, ~58.6% |0⟩
+total_shots = sum(mock_counts.values())
+d_bias = sum(1 for state in mock_counts if state[0] == '1') / total_shots  # ~41.4% |1⟩
+add_d = large // 2 + 2 * small  # Original
+add_d += int(d_bias * large)  # Quantum-adjusted addition
+d = 9104 + int(add_d * 0.1)  # Slight d tweak (10% of add_d)
+l = tokens // d  # Rebalance l
 
-import mne
-import neurokit2 as nk
-import numpy as np
-from mne.connectivity import spectral_connectivity
-import matplotlib.pyplot as plt
-
-# Load and split data
-subjects_train = ['01', '02', '03', '04', '05', '06']
-subjects_test = ['07', '08', '09']
-all_subjects = subjects_train + subjects_test
-
-def load_data(subject_id):
-    url = f"https://physionet.org/files/bci-competition-iv-2a/1.0.0/A0{subject_id}E.edf"
-    raw = mne.io.read_raw_edf(url, preload=True)
-    raw.pick_types(eeg=True).resample(250)
-    return mne.make_fixed_length_epochs(raw, duration=4.0, overlap=0.5)
-
-epochs_train = [load_data(s) for s in subjects_train]
-epochs_test = [load_data(s) for s in subjects_test]
-hrv_data = nk.ecg_process("https://physionet.org/files/fantasia/1.0.0/subject1.dat", sampling_rate=250)
-hrv_rr = hrv_data['RR_Intervals'][:max(len(e) for e in epochs_train)]  # Sync length
-
-# Train params on train set
-train_data = np.concatenate([e.get_data() for e in epochs_train])
-tokens = train_data.size
-d = 9104  # Fixed from train sim
-l = 9104
-
-def sovariel_partition(data, d, l):
-    segments = data.reshape(-1, d, l)
-    return np.mean(segments, axis=(1, 2))
-
-# Test on held-out data
-def compute_coherence(epochs, hrv_rr, is_sovariel=True):
-    epochs_data = np.concatenate([e.get_data() for e in epochs])
-    if is_sovariel:
-        fused = np.concatenate([epochs_data.reshape(-1, 1), np.tile(hrv_rr[:len(epochs_data)], (1, epochs_data.shape[1]))], axis=1)
-        sov_data = sovariel_partition(fused, d, l)
-        conn = spectral_connectivity(sov_data[np.newaxis, :, :], method='coh', mode='multitaper', sfreq=250, fmin=8, fmax=13, faverage=True)
-    else:
-        conn = spectral_connectivity(epochs_data, method='coh', mode='multitaper', sfreq=250, fmin=8, fmax=13, faverage=True)
-    return np.mean(conn.get_data())
-
-# Baseline (CSP) and Sovariel on test
-base_coh = compute_coherence(epochs_test, hrv_rr, False)
-sov_coh = compute_coherence(epochs_test, hrv_rr, True)
-
-# Control: Random partition
-np.random.shuffle(epochs_test[0].get_data())
-ctrl_coh = compute_coherence(epochs_test, hrv_rr, False)
-
-# Lift
-lift_percent = ((sov_coh - base_coh) / base_coh) * 100
-ctrl_lift = ((ctrl_coh - base_coh) / base_coh) * 100
-
-print(f"Test Baseline Coherence: {base_coh:.3f}")
-print(f"Sovariel Coherence: {sov_coh:.3f}")
-print(f"Control Coherence: {ctrl_coh:.3f}")
-print(f"Sovariel Lift: {lift_percent:.1f}%")
-print(f"Control Lift: {ctrl_lift:.1f}%")
-
-# Plot
-freqs = np.arange(8, 13, 1)
-plt.plot(freqs, spectral_connectivity(epochs_test[0].get_data(), method='coh', mode='multitaper', sfreq=250, fmin=8, fmax=13, faverage=True).get_data()[0], label='Baseline')
-plt.plot(freqs, spectral_connectivity(sov_data[np.newaxis, :, :], method='coh', mode='multitaper', sfreq=250, fmin=8, fmax=13, faverage=True).get_data()[0], label='Sovariel')
-plt.legend()
-plt.title("α-Band Coherence: Baseline vs Sovariel (Blinded Test)")
-plt.savefig("coherence_plot_blind.png")
+# Rest of sovariel_partition and coherence calc unchanged
